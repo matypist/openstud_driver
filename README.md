@@ -32,7 +32,7 @@ OpenStud Driver can be easily added to your existing project through Maven or Gr
 2) Add the dependency
 ```
 <dependency>
-    <groupId>com.github.LithiumSR</groupId>
+    <groupId>com.github.matypist</groupId>
     <artifactId>openstud_driver</artifactId>
     <version>0.60.2</version>
 </dependency>
@@ -51,7 +51,7 @@ allprojects {
 2) Add the dependency
 ```
 dependencies {
-    implementation 'com.github.LithiumSR:openstud_driver:0.60.2'
+    implementation 'com.github.matypist:openstud_driver:0.60.2'
 }
 ```
 
@@ -83,10 +83,6 @@ dependencies {
 
 **News**
 - [x] News and newsletter events
-
-## Documentation
-
-Soon<sup>(tm)</sup>
 
 ### Examples
 ```
