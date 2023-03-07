@@ -34,7 +34,7 @@ public class SapienzaConfig implements ProviderConfig {
 
     @Override
     public String getEndpointTimetable(OpenstudHelper.Mode mode) {
-        return "https://gomp.uniroma1.it";
+        return "https://gomppublic.uniroma1.it";
     }
 
     @Override
