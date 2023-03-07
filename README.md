@@ -90,7 +90,7 @@ Soon<sup>(tm)</sup>
 
 ### Examples
 ```
-Logger log = Logger.getLogger("lithium.openstud");
+Logger log = Logger.getLogger("matypist.openstud");
 
 //Create an OpenStud object and sign-in
 Openstud os = new OpenstudBuilder().setPassword("myPassword").setStudentID(123456).setLogger(log).build();
