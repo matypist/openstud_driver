@@ -238,7 +238,7 @@ public class ExamReservation {
                 Objects.equals(note, that.note) &&
                 Objects.equals(ssd, that.ssd) &&
                 Objects.equals(module, that.module) &&
-                new JSONArray(attendingModesList).similar(new JSONArray(that.attendingModesList)) &&
+                attendingModesList.equals(that.attendingModesList) &&
                 Objects.equals(attendingModeType, that.attendingModeType);
     }
 
