@@ -27,6 +27,7 @@ public class ExamReservation {
 
     private JSONArray attendingModesList;
 
+    private String attendingMode;
     private String attendingModeType = "0";
 
     public LocalDate getExamDate() {
@@ -181,6 +182,14 @@ public class ExamReservation {
         this.attendingModesList = attendingModesList;
     }
 
+    public String getAttendingMode() {
+        return attendingMode;
+    }
+
+    public void setAttendingMode(String attendingMode) {
+        this.attendingMode = attendingMode;
+    }
+
     public String getAttendingModeType() {
         return attendingModeType;
     }
@@ -211,6 +220,7 @@ public class ExamReservation {
                 ", ssd='" + ssd + '\'' +
                 ", module='" + module + '\'' +
                 ", attendingModesList='" + attendingModesList + '\'' +
+                ", attendingMode='" + attendingMode + '\'' +
                 ", attendingModeType='" + attendingModeType + '\'' +
                 '}';
     }
@@ -239,11 +249,12 @@ public class ExamReservation {
                 Objects.equals(ssd, that.ssd) &&
                 Objects.equals(module, that.module) &&
                 ((attendingModesList == null && that.attendingModesList == null) || (attendingModesList != null && that.attendingModesList != null && attendingModesList.equals(that.attendingModesList))) &&
+                Objects.equals(attendingMode, that.attendingMode) &&
                 Objects.equals(attendingModeType, that.attendingModeType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(reportID, sessionID, courseCode, cfu, reservationNumber, yearCourse, courseDescription, examSubject, teacher, department, channel, endDate, startDate, reservationDate, examDate, note, ssd, module, attendingModesList.toString(), attendingModeType);
+        return Objects.hash(reportID, sessionID, courseCode, cfu, reservationNumber, yearCourse, courseDescription, examSubject, teacher, department, channel, endDate, startDate, reservationDate, examDate, note, ssd, module, attendingModesList.toString(), attendingMode, attendingModeType);
     }
 }

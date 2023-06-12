@@ -251,6 +251,9 @@ class SapienzaHelper {
                     case "modalitaSvolgimentoList":
                         if (!obj.isNull("modalitaSvolgimentoList")) res.setAttendingModesList(obj.getJSONArray("modalitaSvolgimentoList"));
                         break;
+                    case "modalitaSvolgimento":
+                        res.setAttendingMode(obj.getString("modalitaSvolgimento"));
+                        break;
                     default:
                         break;
                 }
