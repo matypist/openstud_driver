@@ -34,7 +34,7 @@ OpenStud Driver can be easily added to your existing project through Maven or Gr
 <dependency>
     <groupId>com.github.matypist</groupId>
     <artifactId>openstud_driver</artifactId>
-    <version>0.60.2</version>
+    <version>0.60.3</version>
 </dependency>
 ```
 
@@ -51,7 +51,7 @@ allprojects {
 2) Add the dependency
 ```
 dependencies {
-    implementation 'com.github.matypist:openstud_driver:0.60.2'
+    implementation 'com.github.matypist:openstud_driver:0.60.3'
 }
 ```
 
@@ -117,12 +117,12 @@ byte[] pdf = os.getPdf(active.get(0));
 int result = os.deleteReservation(active.get(0));
  ```
 
- ## Dependencies
- - [Square OkHttp](https://github.com/square/okhttp)
- - [JUnit](https://github.com/junit-team/junit4)
- - [jsoup](https://jsoup.org/)
- - [ThreeTenBP](https://github.com/ThreeTen/threetenbp)
- - [org/Json](https://github.com/stleary/JSON-java)
- - [Apache HttpComponents](https://hc.apache.org/)
- - [Apache Commons Lang](https://commons.apache.org/proper/commons-lang/)
- - [Apache Commons-IO](https://commons.apache.org/proper/commons-io/)
+## Dependencies
+- [Square OkHttp](https://github.com/square/okhttp)
+- [JUnit](https://github.com/junit-team/junit4)
+- [jsoup](https://jsoup.org/)
+- [ThreeTenBP](https://github.com/ThreeTen/threetenbp)
+- [org/Json](https://github.com/stleary/JSON-java)
+- [Apache HttpComponents](https://hc.apache.org/)
+- [Apache Commons Lang](https://commons.apache.org/proper/commons-lang/)
+- [Apache Commons-IO](https://commons.apache.org/proper/commons-io/)
