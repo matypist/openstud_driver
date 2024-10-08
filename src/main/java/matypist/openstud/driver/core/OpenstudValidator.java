@@ -3,22 +3,36 @@ package matypist.openstud.driver.core;
 import matypist.openstud.driver.exceptions.OpenstudInvalidCredentialsException;
 
 public class OpenstudValidator {
-
     public static boolean validatePassword(Openstud os) {
         return validatePassword(os, os.getStudentPassword());
     }
 
     public static boolean validatePassword(Openstud os, String password) {
+        // https://regex101.com/r/NZ9X7L/1
+
         OpenstudHelper.Provider provider = os.getProvider();
         String nice_path;
         if (provider == OpenstudHelper.Provider.SAPIENZA) {
-            nice_path = "^" +   // start
+            nice_path = "^(?!.*\\s)" +   // start (no spaces)
+                    "(?=[a-zA-Z0-9])" +  // at least one alphanumeric character
+                    "(?=.*[A-Z])" +   // at least one uppercase letter
+                    "(?=.*[a-z])" +   // at least one lowercase letter
+                    "(?=.*[0-9]|.*[!?\\-+*/.,:;_{}\\[\\]()@$%#&=^])" + // at least one digit or special character
+                    ".{8,}" + // at least 8 characters
+                    "|" + // or
+                    "^(?!.*\\s)" +  // start (no spaces)
+                    "(?=[a-zA-Z0-9])" +  // at least one alphanumeric character
+                    "(?=.*[A-Z])" +   // at least one uppercase letter
+                    "(?=.*[a-z]|.*[!?\\-+*/.,:;_{}\\[\\]()@$%#&=^])" +  // at least one lowercase letter or special character
                     "(?=.*[0-9])" +   // at least one digit
-                    "(?=.*[a-z])" +   // at least one lower case letter
-                    "(?=.*[A-Z])" +   // at least one upper case letter
-                    "(?=.*[\\[\\]*?.@#$%^&!=_-])" +  // =.][#?!@$%^&*_-
-                    "(?=\\S+$)" + // no spaces
-                    ".{8,16}" + // length in [8, 16]
+                    ".{8,}" + // at least 8 characters
+                    "|" + // or
+                    "^(?!.*\\s)" +  // start (no spaces)
+                    "(?=[a-zA-Z0-9])" +  // at least one alphanumeric character
+                    "(?=.*[A-Z]|.*[!?\\-+*/.,:;_{}\\[\\]()@$%#&=^])" +  // at least one uppercase letter or special character
+                    "(?=.*[a-z])" +   // at least one lowercase letter
+                    "(?=.*[0-9])" +   // at least one digit
+                    ".{8,}" + // at least 8 characters
                     "$";   // end
         } else {
             throw new IllegalArgumentException("Password validation not supported for this provider");

@@ -42,22 +42,36 @@ public class OpenstudSapienzaTest
     @Test
     public void testPasswordValidation() throws OpenstudInvalidCredentialsException {
         String id = "12345678";
-        String malformed_pwd = "No_Numbers!";
+
+        String malformed_pwd = "OPENSTUd"; // add at least one number or one special character
         Openstud os = new OpenstudBuilder().setPassword(malformed_pwd).setStudentID(id).build();
         assertFalse(OpenstudValidator.validate(os));
-        malformed_pwd = "NoSp3ci4l";
+
+        malformed_pwd = "OP3NSTUD"; // add at least one lowercase letter or one special character
         os = new OpenstudBuilder().setPassword(malformed_pwd).setStudentID(id).build();
         assertFalse(OpenstudValidator.validate(os));
-        malformed_pwd = "2 Spaces !";
+
+        malformed_pwd = "1234567b"; // add at least one uppercase letter or one special character
         os = new OpenstudBuilder().setPassword(malformed_pwd).setStudentID(id).build();
         assertFalse(OpenstudValidator.validate(os));
-        malformed_pwd = "Long_Password_17!";
+
+        malformed_pwd = "oP3N STUD"; // don't use spaces
         os = new OpenstudBuilder().setPassword(malformed_pwd).setStudentID(id).build();
         assertFalse(OpenstudValidator.validate(os));
-        String correct_pwd = "#8_Chars";
+
+        malformed_pwd = "#OpenStud"; // don't start with a special character
+        os = new OpenstudBuilder().setPassword(malformed_pwd).setStudentID(id).build();
+        assertFalse(OpenstudValidator.validate(os));
+
+        String correct_pwd = "Op3nstud"; // uppercase + lowercase + number
         os = new OpenstudBuilder().setPassword(correct_pwd).setStudentID(id).build();
         assertTrue(OpenstudValidator.validate(os));
-        correct_pwd = "[.!-=?#@]1aA";
+
+        correct_pwd = "op3n$tud"; // lowercase + number + special char
+        os = new OpenstudBuilder().setPassword(correct_pwd).setStudentID(id).build();
+        assertTrue(OpenstudValidator.validate(os));
+
+        correct_pwd = "OP3N$TUD"; // uppercase + number + special char
         os = new OpenstudBuilder().setPassword(correct_pwd).setStudentID(id).build();
         assertTrue(OpenstudValidator.validate(os));
     }
