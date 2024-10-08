@@ -18,6 +18,7 @@ import java.util.logging.Logger;
 public class Openstud implements AuthenticationHandler, BioHandler, NewsHandler, TaxHandler, ClassroomHandler, ExamHandler {
     private int maxTries;
     private String endpointAPI;
+    private String endpointLogin;
     private String endpointTimetable;
     private volatile String token;
     private String studentPassword;
@@ -75,6 +76,7 @@ public class Openstud implements AuthenticationHandler, BioHandler, NewsHandler,
             config = new SapienzaConfig();
         }
         endpointAPI = config.getEndpointAPI(mode);
+        endpointLogin = config.getEndpointLogin(mode);
         endpointTimetable = config.getEndpointTimetable(mode);
         key = config.getKey(mode);
     }
@@ -93,6 +95,10 @@ public class Openstud implements AuthenticationHandler, BioHandler, NewsHandler,
 
     public String getEndpointAPI() {
         return endpointAPI;
+    }
+
+    public String getEndpointLogin() {
+        return endpointLogin;
     }
 
     public String getEndpointTimetable() {

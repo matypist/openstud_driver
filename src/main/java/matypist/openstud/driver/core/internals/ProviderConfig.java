@@ -8,6 +8,8 @@ import java.util.Map;
 public interface ProviderConfig {
     String getEndpointAPI(OpenstudHelper.Mode mode);
 
+    String getEndpointLogin(OpenstudHelper.Mode mode);
+
     String getEndpointTimetable(OpenstudHelper.Mode mode);
 
     String getEmailURL();

@@ -33,6 +33,11 @@ public class SapienzaConfig implements ProviderConfig {
     }
 
     @Override
+    public String getEndpointLogin(OpenstudHelper.Mode mode) {
+        return "https://www.studenti.uniroma1.it/authws/login/idm_ldap/iws";
+    }
+
+    @Override
     public String getEndpointTimetable(OpenstudHelper.Mode mode) {
         return "https://gomp.sapienzaapps.it";
     }

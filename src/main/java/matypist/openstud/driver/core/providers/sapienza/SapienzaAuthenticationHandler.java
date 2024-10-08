@@ -3,15 +3,13 @@ package matypist.openstud.driver.core.providers.sapienza;
 import matypist.openstud.driver.core.Openstud;
 import matypist.openstud.driver.core.internals.AuthenticationHandler;
 import matypist.openstud.driver.exceptions.*;
-import okhttp3.FormBody;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
+import okhttp3.*;
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.logging.Level;
 
 public class SapienzaAuthenticationHandler implements AuthenticationHandler {
@@ -53,17 +51,89 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
         }
     }
 
-    private String executeLoginRequest() throws IOException, OpenstudInvalidResponseException {
+    private Response executeLegacyLoginRequest() throws IOException {
+        // {os.getEndpointAPI()}/autenticazione?matricola={os.getStudentID()}&stringaAutenticazione={os.getStudentPassword()}
+
         RequestBody formBody = new FormBody.Builder()
                 .add("key", os.getKey()).add("matricola", os.getStudentID()).add("stringaAutenticazione", os.getStudentPassword()).build();
+
         Request req = new Request.Builder().url(String.format("%s/autenticazione", os.getEndpointAPI())).header("Accept", "application/json")
                 .header("Content-EventType", "application/x-www-form-urlencoded").post(formBody).build();
+
         Response resp = os.getClient().newCall(req).execute();
-        if (resp.body() == null) throw new OpenstudInvalidResponseException("Infostud answer is not valid");
-        String body = resp.body().string();
+
+        return resp;
+    }
+
+    private Response executeIDMLoginRequest() throws IOException {
+        /*
+        {
+           request: {
+            user: os.getStudentID()
+            passw: os.getStudentPassword()
+           }
+           id: null
+        }
+        */
+
+        JSONObject requestObj = new JSONObject();
+        requestObj.put("user", os.getStudentID());
+        requestObj.put("passwd", os.getStudentPassword());
+
+        JSONObject jsonBody = new JSONObject();
+        jsonBody.put("request", requestObj);
+        jsonBody.put("id", JSONObject.NULL);
+
+        RequestBody reqBody = RequestBody.create(
+                jsonBody.toString().getBytes(StandardCharsets.UTF_8),
+                MediaType.get("application/json")
+        );
+
+        Request req = new Request.Builder().url(os.getEndpointLogin())
+                .header("Content-Type", "application/json")
+                .post(reqBody)
+                .build();
+
+        Response resp = os.getClient().newCall(req).execute();
+
+        return resp;
+    }
+
+    private String executeLoginRequest() throws IOException, OpenstudInvalidResponseException {
+        Response resp = null;
+
+        try {
+            resp = executeIDMLoginRequest();
+        } catch(IOException ignored) {}
+
+        String body = "";
+
+        if (resp != null && resp.body() != null) {
+            body = resp.body().string();
+
+            if (!body.contains("result") || (!body.contains("tokeniws") && !body.contains("error")) || body.contains("Forbidden")) {
+                resp.close();
+
+                resp = executeLegacyLoginRequest();
+
+                if (resp.body() != null) body = resp.body().string();
+            }
+        } else {
+            if(resp != null) resp.close();
+
+            resp = executeLegacyLoginRequest();
+
+            if (resp.body() != null) body = resp.body().string();
+        }
+
+        if(body.isEmpty()) {
+            throw new OpenstudInvalidResponseException("Infostud answer is not valid");
+        }
+
         resp.close();
         if (body.contains("the page you are looking for is currently unavailable"))
             throw new OpenstudInvalidResponseException("InfoStud is in maintenance").setMaintenanceType();
+
         return body;
     }
 
@@ -295,10 +365,29 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
                 throw new OpenstudInvalidCredentialsException("Student ID is not valid");
             String body = executeLoginRequest();
             os.log(Level.INFO, body);
+
             JSONObject response = new JSONObject(body);
-            if (response.has("output") && !response.isNull("output")) os.setToken(response.getString("output"));
+
+            String token = "";
+
+            if (response.has("output")) {
+                if (!response.isNull("output")) {
+                    token = response.getString("output");
+                }
+            } else if (response.has("result")) {
+                if (!response.isNull("result")) {
+                    JSONObject result = response.getJSONObject("result");
+
+                    if(result.has("tokeniws") && !result.isNull("tokeniws")) {
+                        token = result.getString("tokeniws");
+                    }
+                }
+            } else throw new OpenstudInvalidResponseException("Infostud answer is not valid");
+
+            if(!token.isEmpty()) os.setToken(token);
+
             if (body.toLowerCase().contains("password errata")) {
-                OpenstudInvalidCredentialsException e =  new OpenstudInvalidCredentialsException("Credentials are not valid");
+                OpenstudInvalidCredentialsException e = new OpenstudInvalidCredentialsException("Credentials are not valid");
                 String out = StringUtils.substringBetween(body.toLowerCase(), "tentativo", "effettuato").trim();
                 if (out.contains("/")) {
                     String[] elements = out.split("/");
@@ -312,10 +401,12 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
                     }
                 }
                 throw e;
+            } else if (body.toLowerCase().contains("invalid credentials")) {
+                throw new OpenstudInvalidCredentialsException("Credentials are not valid");
+            } else if (body.toLowerCase().contains("utenza bloccata")) {
+                throw new OpenstudInvalidCredentialsException("Account is blocked").setAccountBlockedType();
             }
-            else if (body.toLowerCase().contains("utenza bloccata")) throw new OpenstudInvalidCredentialsException("Account is blocked").setAccountBlockedType();
-            if (response.has("output")) os.setToken(response.getString("output"));
-            else if (!response.has("output")) throw new OpenstudInvalidResponseException("Infostud answer is not valid");
+
             if (response.has("esito")) {
                 switch (response.getJSONObject("esito").getInt("flagEsito")) {
                     case -6:
@@ -332,6 +423,20 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
                     default:
                         throw new OpenstudInvalidResponseException("Infostud is not working as expected");
                 }
+            } else if(response.has("error")) {
+                switch (response.getJSONObject("error").getString("code")) {
+                    case "auth110":
+                    case "auth500":
+                        throw new OpenstudInvalidResponseException("Infostud is not working as intended");
+                    case "auth151":
+                        throw new OpenstudUserNotEnabledException("User is not enabled to use Infostud service.");
+                    case "0":
+                        break;
+                    default:
+                        throw new OpenstudInvalidResponseException("Infostud is not working as expected");
+                }
+            } else if(token.isEmpty()) {
+                throw new OpenstudInvalidResponseException("Infostud is not working as expected");
             }
         } catch (IOException e) {
             OpenstudConnectionException connectionException = new OpenstudConnectionException(e);
