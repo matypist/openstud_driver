@@ -19,6 +19,26 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
         this.os = openstud;
     }
 
+    private String getTokenFromResponse(JSONObject response) throws OpenstudInvalidResponseException {
+        String token = "";
+
+        if (response.has("output")) {
+            if (!response.isNull("output")) {
+                token = response.getString("output");
+            }
+        } else if (response.has("result")) {
+            if (!response.isNull("result")) {
+                JSONObject result = response.getJSONObject("result");
+
+                if(result.has("tokeniws") && !result.isNull("tokeniws")) {
+                    token = result.getString("tokeniws");
+                }
+            }
+        } else throw new OpenstudInvalidResponseException("Infostud answer is not valid");
+
+        return token;
+    }
+
     @Override
     public synchronized void refreshToken() throws OpenstudRefreshException, OpenstudInvalidResponseException {
         try {
@@ -26,8 +46,12 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
                 throw new OpenstudRefreshException("Student ID is not valid");
             String body = executeLoginRequest();
             JSONObject response = new JSONObject(body);
+
+            String token = getTokenFromResponse(response);
+            if(!token.isEmpty()) os.setToken(token);
+
             if (body.toLowerCase().contains("utenza bloccata")) throw new OpenstudRefreshException("Account is blocked").setAccountBlockedType();
-            if (response.has("output") && !response.isNull("output") && !response.getString("output").isEmpty()) os.setToken(response.getString("output"));
+
             if (response.has("esito")) {
                 switch (response.getJSONObject("esito").getInt("flagEsito")) {
                     case -6:
@@ -44,6 +68,20 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
                     default:
                         throw new OpenstudInvalidResponseException("Infostud is not working as intended");
                 }
+            } else if(response.has("error")) {
+                switch (response.getJSONObject("error").getString("code")) {
+                    case "auth110":
+                    case "auth500":
+                        throw new OpenstudInvalidResponseException("Infostud is not working as intended");
+                    case "auth151":
+                        throw new OpenstudRefreshException("User is not enabled to use Infostud service.");
+                    case "0":
+                        break;
+                    default:
+                        throw new OpenstudInvalidResponseException("Infostud is not working as expected");
+                }
+            } else if(token.isEmpty()) {
+                throw new OpenstudInvalidResponseException("Infostud is not working as expected");
             }
         } catch (IOException | JSONException e) {
             os.log(Level.SEVERE, e);
@@ -368,22 +406,7 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
 
             JSONObject response = new JSONObject(body);
 
-            String token = "";
-
-            if (response.has("output")) {
-                if (!response.isNull("output")) {
-                    token = response.getString("output");
-                }
-            } else if (response.has("result")) {
-                if (!response.isNull("result")) {
-                    JSONObject result = response.getJSONObject("result");
-
-                    if(result.has("tokeniws") && !result.isNull("tokeniws")) {
-                        token = result.getString("tokeniws");
-                    }
-                }
-            } else throw new OpenstudInvalidResponseException("Infostud answer is not valid");
-
+            String token = getTokenFromResponse(response);
             if(!token.isEmpty()) os.setToken(token);
 
             if (body.toLowerCase().contains("password errata")) {

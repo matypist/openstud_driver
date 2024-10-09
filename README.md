@@ -1,6 +1,6 @@
 # OpenStud Driver [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-OpenStud Driver is a Java Library to obtain infos from Sapienza University's Infostud 2.0.
+OpenStud Driver is a Java Library to obtain info from Sapienza University's Infostud 2.0.
 
 This library is thread-safe and Android-friendly.
 
