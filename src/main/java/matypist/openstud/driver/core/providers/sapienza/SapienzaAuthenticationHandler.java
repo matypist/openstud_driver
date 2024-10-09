@@ -71,10 +71,11 @@ public class SapienzaAuthenticationHandler implements AuthenticationHandler {
             } else if(response.has("error")) {
                 switch (response.getJSONObject("error").getString("code")) {
                     case "auth110":
-                    case "auth500":
-                        throw new OpenstudInvalidResponseException("Infostud is not working as intended");
+                        throw new OpenstudRefreshException("Invalid credentials when refreshing token").setPasswordInvalidType();
                     case "auth151":
                         throw new OpenstudRefreshException("User is not enabled to use Infostud service.");
+                    case "auth500":
+                        throw new OpenstudInvalidResponseException("Infostud is not working as intended");
                     case "0":
                         break;
                     default:
