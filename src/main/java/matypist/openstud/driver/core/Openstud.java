@@ -8,9 +8,23 @@ import okhttp3.ConnectionSpec;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.tuple.Pair;
 import org.threeten.bp.LocalDate;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
+import java.io.File;
+import java.io.InputStream;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.security.KeyStore;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -53,16 +67,217 @@ public class Openstud implements AuthenticationHandler, BioHandler, NewsHandler,
         this.waitTimeClassroomRequest = builder.waitTimeClassroomRequest;
         this.limitSearch = builder.limitSearchResults;
         this.mode = builder.mode;
-        client = new OkHttpClient.Builder()
+
+        Pair<SSLSocketFactory, X509TrustManager> sslComponents = setupCustomSSL();
+        SSLSocketFactory sslSocketFactory = sslComponents.getLeft();
+        X509TrustManager trustManager = sslComponents.getRight();
+
+        // Build the OkHttpClient
+        OkHttpClient.Builder clientBuilder = new OkHttpClient.Builder()
                 .connectTimeout(builder.connectTimeout, TimeUnit.SECONDS)
                 .writeTimeout(builder.writeTimeout, TimeUnit.SECONDS)
                 .readTimeout(builder.readTimeout, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
-                .connectionSpecs(Collections.singletonList(ConnectionSpec.COMPATIBLE_TLS))
-                .build();
+                .connectionSpecs(Collections.singletonList(ConnectionSpec.COMPATIBLE_TLS));
+
+        // Apply custom SSLSocketFactory only if successfully created
+        if (sslSocketFactory != null && trustManager != null) {
+            clientBuilder.sslSocketFactory(sslSocketFactory, trustManager);
+        }
+
+        client = clientBuilder.build();
+
         init();
         config.addKeys(builder.keyMap);
     }
+
+    /**
+     * Loads a single PEM certificate from resources into the provided KeyStore.
+     * @param keyStore The KeyStore to add the certificate to.
+     * @param pemResourcePath The resource path of the PEM file (e.g., "certs/sapienza/uniroma1.pem").
+     * @param alias The alias to assign to the certificate entry.
+     * @return true if the certificate was found and loaded, false otherwise.
+     * @throws Exception If certificate parsing or KeyStore operations fail.
+     */
+    private boolean loadCertificate(KeyStore keyStore, String pemResourcePath, String alias) throws Exception {
+        InputStream pemInputStream = getClass().getClassLoader().getResourceAsStream(pemResourcePath);
+        if (pemInputStream == null) {
+            log(Level.WARNING, "Custom certificate '" + pemResourcePath + "' not found in resources. Skipping.");
+            return false; // Certificate not found
+        }
+
+        try {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(pemInputStream);
+            keyStore.setCertificateEntry(alias, cert);
+            log(Level.FINE, "Loaded custom certificate '" + pemResourcePath + "' with alias '" + alias + "'.");
+            return true; // Certificate loaded
+        } finally {
+            if (pemInputStream != null) {
+                pemInputStream.close();
+            }
+        }
+    }
+
+    /**
+     * Loads all certificates from a given resource directory into the KeyStore.
+     * This method is designed to work both from a filesystem (IDE) and a JAR file.
+     * @param keyStore The KeyStore to add the certificates to.
+     * @param path The resource path of the directory (e.g., "certs/sapienza").
+     * @return true if at least one certificate was loaded, false otherwise.
+     */
+    private boolean loadCertificatesFromResourceDirectory(KeyStore keyStore, String path) {
+        boolean loadedAny = false;
+        log(Level.FINE, "Loading custom certificates from resource directory: " + path);
+
+        try {
+            URL dirURL = getClass().getClassLoader().getResource(path);
+
+            if (dirURL == null) {
+                log(Level.WARNING, "Resource directory '" + path + "' not found. Skipping custom certificate loading.");
+                return false;
+            }
+
+            if (dirURL.getProtocol().equals("file")) {
+                // Running from filesystem (e.g., IDE)
+                File certDir = new File(dirURL.toURI());
+                File[] files = certDir.listFiles();
+                if (files == null) {
+                    log(Level.WARNING, "Could not list files in directory: " + certDir.getAbsolutePath());
+                    return false;
+                }
+                int aliasCounter = 0;
+                for (File file : files) {
+                    if (file.isFile()) {
+                        String resourcePath = path + "/" + file.getName();
+                        String alias = "custom-cert-" + (aliasCounter++);
+                        if (loadCertificate(keyStore, resourcePath, alias)) {
+                            loadedAny = true;
+                        }
+                    }
+                }
+            } else if (dirURL.getProtocol().equals("jar")) {
+                // Running from JAR
+                JarURLConnection jarURLConnection = (JarURLConnection) dirURL.openConnection();
+                JarFile jarFile = jarURLConnection.getJarFile();
+                java.util.Enumeration<JarEntry> entries = jarFile.entries();
+
+                String dirPath = path + "/";
+                int aliasCounter = 0;
+
+                while (entries.hasMoreElements()) {
+                    JarEntry entry = entries.nextElement();
+                    String entryName = entry.getName();
+                    if (entryName.startsWith(dirPath) && !entry.isDirectory()) {
+                        String alias = "custom-cert-" + (aliasCounter++);
+                        if (loadCertificate(keyStore, entryName, alias)) {
+                            loadedAny = true;
+                        }
+                    }
+                }
+            } else {
+                log(Level.WARNING, "Unsupported protocol '" + dirURL.getProtocol() + "' for resource directory. Skipping custom certificates.");
+                return false;
+            }
+        } catch (Exception e) {
+            // Catch all exceptions related to cert loading (IO, Security, URI, etc.)
+            log(Level.SEVERE, "Failed to load certificates from directory '" + path + "'. Error: " + e.getMessage());
+            return false;
+        }
+
+        return loadedAny;
+    }
+
+
+    /**
+     * Sets up a custom SSLContext and TrustManager.
+     * If the provider is SAPIENZA, this attempts to load all certificates
+     * from the 'certs/sapienza' resource directory and adds them to the default system trust store.
+     * If the provider is not SAPIENZA, or if the custom certs are not found,
+     * it returns nulls, forcing OkHttp to use the default system TrustManager.
+     * @return A Pair containing the SSLSocketFactory (Left) and X509TrustManager (Right),
+     * or Pair.of(null, null) if setup fails or is not required.
+     */
+    private Pair<SSLSocketFactory, X509TrustManager> setupCustomSSL() {
+        // Only apply custom certificates for the SAPIENZA provider
+        if (this.provider != OpenstudHelper.Provider.SAPIENZA) {
+            log(Level.FINE, "Provider is not Sapienza. Using default system TrustManager.");
+            return Pair.of(null, null);
+        }
+
+        log(Level.FINE, "Provider is Sapienza. Attempting to add custom certificates to default TrustManager.");
+
+        SSLSocketFactory sslSocketFactory = null;
+        X509TrustManager trustManager = null;
+
+        try {
+            // Create a KeyStore
+            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            keyStore.load(null, null); // Init empty
+
+            // Get the default system TrustManager
+            TrustManagerFactory tmfDefault = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmfDefault.init((KeyStore) null); // Initialize with default system KeyStore
+
+            X509TrustManager defaultTrustManager = null;
+            for (TrustManager tm : tmfDefault.getTrustManagers()) {
+                if (tm instanceof X509TrustManager) {
+                    defaultTrustManager = (X509TrustManager) tm;
+                    break;
+                }
+            }
+            if (defaultTrustManager == null) {
+                throw new IllegalStateException("No default X509TrustManager found");
+            }
+
+            // Add all default CAs to our new KeyStore
+            int defaultCaCount = 0;
+            for (X509Certificate cert : defaultTrustManager.getAcceptedIssuers()) {
+                // Use a unique alias for each default CA
+                keyStore.setCertificateEntry("default-ca-" + defaultCaCount++, cert);
+            }
+            log(Level.FINE, "Loaded " + defaultCaCount + " default system CAs.");
+
+            // Add custom SAPIENZA certificates from the resource directory
+            boolean customCertLoaded = loadCertificatesFromResourceDirectory(keyStore, "certs/sapienza");
+
+            // If no custom certificates were loaded, just use the default TrustManager
+            if (!customCertLoaded) {
+                log(Level.WARNING, "Sapienza provider selected, but no custom certificates found in resource directory 'certs/sapienza'. Using default TrustManager only.");
+                return Pair.of(null, null);
+            }
+
+            // Create a new TrustManagerFactory that trusts both default and custom CAs
+            TrustManagerFactory tmfCombined = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmfCombined.init(keyStore);
+
+            // Find the X509TrustManager
+            for (TrustManager tm : tmfCombined.getTrustManagers()) {
+                if (tm instanceof X509TrustManager) {
+                    trustManager = (X509TrustManager) tm;
+                    break;
+                }
+            }
+            if (trustManager == null) {
+                throw new IllegalStateException("No X509TrustManager found in combined KeyStore");
+            }
+
+            // Create an SSLContext that uses our combined TrustManager
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{trustManager}, null);
+
+            sslSocketFactory = sslContext.getSocketFactory();
+            log(Level.FINE, "Custom SSLContext initialized successfully, combining default CAs with custom certificates.");
+
+        } catch (Exception e) {
+            log(Level.SEVERE, "Failed to initialize custom SSLContext, falling back to default. Error: " + e.getMessage());
+            // Reset to null on failure to ensure default is used
+            return Pair.of(null, null);
+        }
+
+        return Pair.of(sslSocketFactory, trustManager);
+    }
+
 
     private void init() {
         if (provider == null) throw new IllegalArgumentException("Provider can't be left null");

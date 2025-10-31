@@ -8,7 +8,9 @@ import matypist.openstud.driver.core.models.EventType;
 import matypist.openstud.driver.core.models.News;
 import matypist.openstud.driver.exceptions.OpenstudConnectionException;
 import matypist.openstud.driver.exceptions.OpenstudInvalidResponseException;
-import org.jsoup.Connection;
+import okhttp3.HttpUrl;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -62,11 +64,19 @@ public class SapienzaNewsHandler implements NewsHandler {
             int iterations = 0;
             int miss = 0;
             for (int i = startPage; i < endPage && !shouldStop; i++) {
-                Connection connection = Jsoup.connect(String.format("%s/%s/tutte-le-notizie", website_url, locale))
-                        .data(page_key, i + "");
-                if (query != null)
-                    connection = connection.data(query_key, query);
-                Document doc = connection.get();
+                HttpUrl.Builder urlBuilder = HttpUrl.parse(String.format("%s/%s/tutte-le-notizie", website_url, locale)).newBuilder();
+                urlBuilder.addQueryParameter(page_key, i + "");
+                if (query != null) {
+                    urlBuilder.addQueryParameter(query_key, query);
+                }
+
+                Request request = new Request.Builder().url(urlBuilder.build()).get().build();
+                Document doc;
+                try (Response response = os.getClient().newCall(request).execute()) {
+                    if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+                    doc = Jsoup.parse(response.body().string(), request.url().toString());
+                }
+
                 Elements boxes = doc.getElementsByClass("box-news");
                 for (Element box : boxes) {
                     News news = new News();
@@ -93,8 +103,24 @@ public class SapienzaNewsHandler implements NewsHandler {
             }
             LinkedList<News> ignored = new LinkedList<>();
             for (News news : ret) {
-                if (!OpenstudHelper.isValidUrl(news.getUrl())) ignored.add(news);
-                Document doc = Jsoup.connect(news.getUrl()).get();
+                if (!OpenstudHelper.isValidUrl(news.getUrl())) {
+                    ignored.add(news);
+                    continue;
+                }
+
+                Request detailsRequest = new Request.Builder().url(news.getUrl()).get().build();
+                Document doc;
+                try (Response detailsResponse = os.getClient().newCall(detailsRequest).execute()) {
+                    if (!detailsResponse.isSuccessful()) {
+                        ignored.add(news); // If fetching details fails, ignore this news item
+                        continue;
+                    }
+                    doc = Jsoup.parse(detailsResponse.body().string(), news.getUrl());
+                } catch (IOException e) {
+                    ignored.add(news); // Also ignore on connection failure
+                    continue;
+                }
+
                 if (withDescription) {
                     Element start = doc.getElementsByAttributeValueEnding("class", "testosommario").first();
                     if (start != null)
@@ -130,8 +156,17 @@ public class SapienzaNewsHandler implements NewsHandler {
             List<Event> ret = new LinkedList<>();
 
             String website_url = "https://www.uniroma1.it/it/newsletter";
-            Document doc = Jsoup.connect(website_url).get();
+
+            Request request = new Request.Builder().url(website_url).get().build();
+            Document doc;
+            try (Response response = os.getClient().newCall(request).execute()) {
+                if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+                doc = Jsoup.parse(response.body().string(), website_url);
+            }
+
             Elements events = doc.getElementsByClass("event");
+            os.log(Level.FINE, "SapienzaNewsHandler: Found " + events.size() + " event elements.");
+
             DateTimeFormatter formatter = new DateTimeFormatterBuilder()
                     .appendOptional(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))
                     .appendOptional(DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm"))
@@ -139,41 +174,94 @@ public class SapienzaNewsHandler implements NewsHandler {
                     .appendOptional(DateTimeFormatter.ofPattern("d MMMM yyyy HH:mm"))
                     .toFormatter(Locale.ENGLISH);
             int failed = 0;
-            for (Element event : events) {
-                Elements views = event.getElementsByClass("views-field");
-                if (views.size() != 5) {
+            for (int i = 0; i < events.size(); i++) {
+                Element event = events.get(i);
+                Element dateEl = event.getElementsByClass("views-field-solr-document-1").first();
+                Element timeEl = event.getElementsByClass("views-field-solr-document-2").first();
+                Element titleEl = event.getElementsByClass("views-field-solr-document").first();
+                Element whereEl = event.getElementsByClass("views-field-solr-document-4").first();
+                Element roomEl = event.getElementsByClass("views-field-solr-document-5").first();
+
+                if (dateEl == null || timeEl == null || titleEl == null) {
+                    os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ": missing required elements (date, time, or title).");
                     failed++;
                     continue;
                 }
+
+                Element dateA = dateEl.getElementsByTag("a").first();
+                Element timeA = timeEl.getElementsByTag("a").first();
+                Element titleA = titleEl.getElementsByTag("a").first();
+
+                if (dateA == null || timeA == null || titleA == null) {
+                    os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ": missing required <a> tags within elements.");
+                    failed++;
+                    continue;
+                }
+
                 Event ev = new Event(EventType.THEATRE);
-                String date = views.remove(0).getElementsByTag("a").text().replace(",", "");
-                String time = views.remove(0).getElementsByTag("a").text();
+
+                String date = dateA.text().replace(",", "");
+                String time = timeA.text();
+                String dateTimeString = date + " " + time;
+
                 try {
-                    ev.setStart(LocalDateTime.parse(date + " " + time, formatter));
+                    ev.setStart(LocalDateTime.parse(dateTimeString, formatter));
                 } catch (DateTimeParseException e) {
+                    os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ". DateTimeParseException for string: '" + dateTimeString + "' " + e.getMessage());
                     failed++;
                     continue;
                 }
-                Elements title = views.remove(0).getElementsByTag("a");
-                ev.setTitle(title.text());
-                ev.setUrl(title.attr("href"));
-                doc = Jsoup.connect(ev.getUrl()).get();
-                ev.setRoom(doc.getElementsByClass("views-field-field-apm-aula").first().text().trim().replaceAll(" ?- ?",", "));
-                ev.setWhere(doc.getElementsByClass("views-field-field-apm-edificio").first().text().trim());
-                Element image = doc.getElementsByClass("field-type-image").first();
-                if (image != null) {
-                    ev.setImageUrl(image.getElementsByTag("img").first().attr("src"));
+
+                ev.setTitle(titleA.text());
+                ev.setUrl(titleA.attr("href"));
+
+                if (whereEl != null) {
+                    ev.setWhere(whereEl.text().trim());
                 }
-                Element description = doc.getElementsByClass("article-body").first();
+                if (roomEl != null) {
+                    ev.setRoom(roomEl.text().trim().replaceAll(" ?- ?",", "));
+                }
+
+                if (!OpenstudHelper.isValidUrl(ev.getUrl())) {
+                    os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ": Invalid URL '" + ev.getUrl() + "'");
+                    failed++;
+                    continue;
+                }
+
+                Request eventRequest = new Request.Builder().url(ev.getUrl()).get().build();
+                Document eventDoc;
+                try (Response eventResponse = os.getClient().newCall(eventRequest).execute()) {
+                    if (!eventResponse.isSuccessful()) {
+                        os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ". Failed to fetch details page: " + eventResponse.code() + " for URL: " + ev.getUrl());
+                        failed++;
+                        continue;
+                    }
+                    eventDoc = Jsoup.parse(eventResponse.body().string(), ev.getUrl());
+                } catch (IOException e) {
+                    os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ". IOException fetching details page for URL: " + ev.getUrl() + " " + e.getMessage());
+                    failed++;
+                    continue;
+                }
+
+                Element image = eventDoc.getElementsByClass("field-type-image").first();
+                if (image != null) {
+                    Element imgTag = image.getElementsByTag("img").first();
+                    if (imgTag != null)
+                        ev.setImageUrl(imgTag.attr("src"));
+                }
+                Element description = eventDoc.getElementsByClass("article-body").first();
                 if (description != null) ev.setDescription(description.text());
                 ret.add(ev);
             }
 
             if (failed == events.size() && !events.isEmpty()) {
+                os.log(Level.SEVERE, "SapienzaNewsHandler: All " + failed + " event parsing attempts failed. Throwing InvalidResponseException.");
                 OpenstudInvalidResponseException invalidResponse = new OpenstudInvalidResponseException("invalid HTML").setHTMLType();
                 os.log(Level.SEVERE, invalidResponse);
                 throw invalidResponse;
             }
+
+            os.log(Level.FINE, "SapienzaNewsHandler: Successfully parsed " + ret.size() + " events, " + failed + " failed.");
             return ret;
 
         } catch (IOException e) {

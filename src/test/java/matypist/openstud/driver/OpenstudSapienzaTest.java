@@ -13,6 +13,10 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 import static org.junit.Assert.*;
 
@@ -29,7 +33,23 @@ public class OpenstudSapienzaTest
         if (setUpIsDone || invalidCredentials) {
             return;
         }
-        os = new OpenstudBuilder().setPassword(System.getenv("OPENSTUD_TESTPWD")).setStudentID(System.getenv("OPENSTUD_TESTID")).build();
+
+        Logger logger = Logger.getLogger(OpenstudSapienzaTest.class.getName());
+        logger.setUseParentHandlers(false);
+
+        if (logger.getHandlers().length == 0) {
+            ConsoleHandler handler = new ConsoleHandler();
+            handler.setLevel(Level.ALL);
+            handler.setFormatter(new SimpleFormatter());
+            logger.addHandler(handler);
+        }
+        logger.setLevel(Level.ALL);
+
+        os = new OpenstudBuilder()
+                .setPassword(System.getenv("OPENSTUD_TESTPWD"))
+                .setStudentID(System.getenv("OPENSTUD_TESTID"))
+                .setLogger(logger)
+                .build();
         try {
             os.login();
         } catch (OpenstudInvalidCredentialsException e) {
