@@ -34,7 +34,7 @@ OpenStud Driver can be easily added to your existing project through Maven or Gr
 <dependency>
     <groupId>com.github.matypist</groupId>
     <artifactId>openstud_driver</artifactId>
-    <version>0.60.6</version>
+    <version>0.61.0</version>
 </dependency>
 ```
 
@@ -51,7 +51,7 @@ allprojects {
 2) Add the dependency
 ```
 dependencies {
-    implementation 'com.github.matypist:openstud_driver:0.60.6'
+    implementation 'com.github.matypist:openstud_driver:0.61.0'
 }
 ```
 
