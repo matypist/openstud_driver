@@ -167,6 +167,10 @@ public class SapienzaNewsHandler implements NewsHandler {
             Elements events = doc.getElementsByClass("event");
             os.log(Level.FINE, "SapienzaNewsHandler: Found " + events.size() + " event elements.");
 
+            String failureReason = null;
+            boolean allFailedForSameReason = true;
+            Throwable firstEncounteredException = null;
+
             DateTimeFormatter formatter = new DateTimeFormatterBuilder()
                     .appendOptional(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))
                     .appendOptional(DateTimeFormatter.ofPattern("dd MMMM yyyy HH:mm"))
@@ -184,6 +188,12 @@ public class SapienzaNewsHandler implements NewsHandler {
 
                 if (dateEl == null || timeEl == null || titleEl == null) {
                     os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ": missing required elements (date, time, or title).");
+                    String currentReason = "missing required elements";
+                    if (failureReason == null) {
+                        failureReason = currentReason;
+                        firstEncounteredException = new OpenstudInvalidResponseException("Missing required elements on event " + i);
+                    }
+                    else if (allFailedForSameReason && !failureReason.equals(currentReason)) allFailedForSameReason = false;
                     failed++;
                     continue;
                 }
@@ -194,6 +204,12 @@ public class SapienzaNewsHandler implements NewsHandler {
 
                 if (dateA == null || timeA == null || titleA == null) {
                     os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ": missing required <a> tags within elements.");
+                    String currentReason = "missing required a tags";
+                    if (failureReason == null) {
+                        failureReason = currentReason;
+                        firstEncounteredException = new OpenstudInvalidResponseException("Missing required <a> tags on event " + i);
+                    }
+                    else if (allFailedForSameReason && !failureReason.equals(currentReason)) allFailedForSameReason = false;
                     failed++;
                     continue;
                 }
@@ -208,6 +224,12 @@ public class SapienzaNewsHandler implements NewsHandler {
                     ev.setStart(LocalDateTime.parse(dateTimeString, formatter));
                 } catch (DateTimeParseException e) {
                     os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ". DateTimeParseException for string: '" + dateTimeString + "' " + e.getMessage());
+                    String currentReason = "DateTimeParseException";
+                    if (failureReason == null) {
+                        failureReason = currentReason;
+                        firstEncounteredException = e;
+                    }
+                    else if (allFailedForSameReason && !failureReason.equals(currentReason)) allFailedForSameReason = false;
                     failed++;
                     continue;
                 }
@@ -215,15 +237,14 @@ public class SapienzaNewsHandler implements NewsHandler {
                 ev.setTitle(titleA.text());
                 ev.setUrl(titleA.attr("href"));
 
-                if (whereEl != null) {
-                    ev.setWhere(whereEl.text().trim());
-                }
-                if (roomEl != null) {
-                    ev.setRoom(roomEl.text().trim().replaceAll(" ?- ?",", "));
-                }
-
                 if (!OpenstudHelper.isValidUrl(ev.getUrl())) {
                     os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ": Invalid URL '" + ev.getUrl() + "'");
+                    String currentReason = "invalid URL";
+                    if (failureReason == null) {
+                        failureReason = currentReason;
+                        firstEncounteredException = new OpenstudInvalidResponseException("Invalid URL on event " + i + ": " + ev.getUrl());
+                    }
+                    else if (allFailedForSameReason && !failureReason.equals(currentReason)) allFailedForSameReason = false;
                     failed++;
                     continue;
                 }
@@ -233,14 +254,46 @@ public class SapienzaNewsHandler implements NewsHandler {
                 try (Response eventResponse = os.getClient().newCall(eventRequest).execute()) {
                     if (!eventResponse.isSuccessful()) {
                         os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ". Failed to fetch details page: " + eventResponse.code() + " for URL: " + ev.getUrl());
+                        String currentReason = "failed to fetch details page";
+                        if (failureReason == null) {
+                            failureReason = currentReason;
+                            firstEncounteredException = new OpenstudConnectionException("Failed to fetch details page: " + eventResponse.code() + " for URL: " + ev.getUrl());
+                        }
+                        else if (allFailedForSameReason && !failureReason.equals(currentReason)) allFailedForSameReason = false;
                         failed++;
                         continue;
                     }
                     eventDoc = Jsoup.parse(eventResponse.body().string(), ev.getUrl());
                 } catch (IOException e) {
                     os.log(Level.WARNING, "SapienzaNewsHandler: Skipping event " + i + ". IOException fetching details page for URL: " + ev.getUrl() + " " + e.getMessage());
+                    String currentReason = "IOException fetching details page";
+                    if (failureReason == null) {
+                        failureReason = currentReason;
+                        firstEncounteredException = e;
+                    }
+                    else if (allFailedForSameReason && !failureReason.equals(currentReason)) allFailedForSameReason = false;
                     failed++;
                     continue;
+                }
+
+                if (whereEl != null) {
+                    ev.setWhere(whereEl.text().trim());
+                }
+                if (ev.getWhere() == null || ev.getWhere().isEmpty()) {
+                    Element whereFallbackEl = eventDoc.getElementsByClass("views-field-field-apm-edificio").first();
+                    if (whereFallbackEl != null) {
+                        ev.setWhere(whereFallbackEl.text().trim());
+                    }
+                }
+
+                if (roomEl != null) {
+                    ev.setRoom(roomEl.text().trim().replaceAll(" ?- ?",", "));
+                }
+                if (ev.getRoom() == null || ev.getRoom().isEmpty()) {
+                    Element roomFallbackEl = eventDoc.getElementsByClass("views-field-field-apm-aula").first();
+                    if (roomFallbackEl != null) {
+                        ev.setRoom(roomFallbackEl.text().trim().replaceAll(" ?- ?",", "));
+                    }
                 }
 
                 Element image = eventDoc.getElementsByClass("field-type-image").first();
@@ -256,7 +309,18 @@ public class SapienzaNewsHandler implements NewsHandler {
 
             if (failed == events.size() && !events.isEmpty()) {
                 os.log(Level.SEVERE, "SapienzaNewsHandler: All " + failed + " event parsing attempts failed. Throwing InvalidResponseException.");
-                OpenstudInvalidResponseException invalidResponse = new OpenstudInvalidResponseException("invalid HTML").setHTMLType();
+                String exceptionReason = failureReason;
+                if (!allFailedForSameReason) {
+                    exceptionReason = "multiple reasons";
+                } else if (exceptionReason == null) {
+                    exceptionReason = "unknown reason";
+                }
+                OpenstudInvalidResponseException invalidResponse = new OpenstudInvalidResponseException("invalid HTML: " + exceptionReason).setHTMLType();
+
+                if (allFailedForSameReason && firstEncounteredException != null) {
+                    invalidResponse.initCause(firstEncounteredException);
+                }
+
                 os.log(Level.SEVERE, invalidResponse);
                 throw invalidResponse;
             }
@@ -270,5 +334,4 @@ public class SapienzaNewsHandler implements NewsHandler {
             throw connectionException;
         }
     }
-
 }

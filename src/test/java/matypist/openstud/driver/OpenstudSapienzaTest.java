@@ -43,7 +43,7 @@ public class OpenstudSapienzaTest
             handler.setFormatter(new SimpleFormatter());
             logger.addHandler(handler);
         }
-        logger.setLevel(Level.ALL);
+        logger.setLevel(Level.INFO);
 
         os = new OpenstudBuilder()
                 .setPassword(System.getenv("OPENSTUD_TESTPWD"))
