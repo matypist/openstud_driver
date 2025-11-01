@@ -338,6 +338,7 @@ class SapienzaHelper {
                     break;
                 case "indiMailIstituzionale":
                     st.setEmail(response.getString("indiMailIstituzionale"));
+                    break;
                 case "sesso":
                     st.setGender(response.getString("sesso"));
                     break;
