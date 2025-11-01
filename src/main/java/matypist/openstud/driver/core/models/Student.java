@@ -253,6 +253,16 @@ public class Student {
         this.personalEmail = personalEmail;
     }
 
+    public String getDisplayFirstName() {
+        String aliasName = this.getNameAlias();
+        return (aliasName != null && !aliasName.isEmpty()) ? aliasName : this.getFirstName();
+    }
+
+    public String getDisplayLastName() {
+        String aliasSurname = this.getSurnameAlias();
+        return (aliasSurname != null && !aliasSurname.isEmpty()) ? aliasSurname : this.getLastName();
+    }
+
     @Override
     public String toString() {
         return "Student{" +
