@@ -347,6 +347,18 @@ class SapienzaHelper {
                 case "cittadinanza":
                     st.setCitizenship(response.getString("cittadinanza"));
                     break;
+                case "UUIDUtente":
+                    st.setUserUUID(response.getString("UUIDUtente"));
+                    break;
+                case "aliasNome":
+                    st.setNameAlias(response.getString("aliasNome"));
+                    break;
+                case "aliasCognome":
+                    st.setSurnameAlias(response.getString("aliasCognome"));
+                    break;
+                case "indiMail":
+                    st.setPersonalEmail(response.getString("indiMail"));
+                    break;
                 default:
                     break;
             }

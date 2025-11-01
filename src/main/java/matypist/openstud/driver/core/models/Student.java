@@ -28,6 +28,10 @@ public class Student {
     private int typeStudent;
     private int cfu;
     private boolean isErasmus;
+    private String userUUID;
+    private String nameAlias;
+    private String surnameAlias;
+    private String personalEmail;
 
     public String getStudentStatus() {
         return studentStatus;
@@ -217,6 +221,38 @@ public class Student {
         return getTypeStudent() != -1;
     }
 
+    public String getUserUUID() {
+        return userUUID;
+    }
+
+    public void setUserUUID(String userUUID) {
+        this.userUUID = userUUID;
+    }
+
+    public String getNameAlias() {
+        return nameAlias;
+    }
+
+    public void setNameAlias(String nameAlias) {
+        this.nameAlias = nameAlias;
+    }
+
+    public String getSurnameAlias() {
+        return surnameAlias;
+    }
+
+    public void setSurnameAlias(String surnameAlias) {
+        this.surnameAlias = surnameAlias;
+    }
+
+    public String getPersonalEmail() {
+        return personalEmail;
+    }
+
+    public void setPersonalEmail(String personalEmail) {
+        this.personalEmail = personalEmail;
+    }
+
     @Override
     public String toString() {
         return "Student{" +
@@ -243,6 +279,10 @@ public class Student {
                 ", typeStudent=" + typeStudent +
                 ", cfu=" + cfu +
                 ", isErasmus=" + isErasmus +
+                ", userUUID=" + userUUID +
+                ", nameAlias=" + nameAlias +
+                ", surnameAlias=" + surnameAlias +
+                ", personalEmail=" + personalEmail +
                 '}';
     }
 
@@ -254,6 +294,7 @@ public class Student {
         return academicYear == student.academicYear &&
                 academicYearCourse == student.academicYearCourse &&
                 studentID.equals(student.studentID) &&
+                userUUID.equals(student.userUUID) &&
                 codeCourse == student.codeCourse &&
                 typeStudent == student.typeStudent &&
                 cfu == student.cfu &&
@@ -273,11 +314,14 @@ public class Student {
                 Objects.equals(email, student.email) &&
                 Objects.equals(citizenship, student.citizenship) &&
                 Objects.equals(gender, student.gender) &&
-                Objects.equals(studentStatus, student.studentStatus);
+                Objects.equals(studentStatus, student.studentStatus) &&
+                Objects.equals(nameAlias, student.nameAlias) &&
+                Objects.equals(surnameAlias, student.surnameAlias) &&
+                Objects.equals(personalEmail, student.personalEmail);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(CF, firstName, lastName, birthDate, birthCity, birthPlace, courseYear, firstEnrollment, lastEnrollment, departmentName, courseName, nation, email, citizenship, gender, studentStatus, academicYear, academicYearCourse, studentID, codeCourse, typeStudent, cfu, isErasmus);
+        return Objects.hash(CF, firstName, lastName, birthDate, birthCity, birthPlace, courseYear, firstEnrollment, lastEnrollment, departmentName, courseName, nation, email, citizenship, gender, studentStatus, academicYear, academicYearCourse, studentID, codeCourse, typeStudent, cfu, isErasmus, userUUID, nameAlias, surnameAlias, personalEmail);
     }
 }
